@@ -2,8 +2,6 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import type { SolutionRequest, SolutionDraft } from "@/types/solution";
 
-const client = new Anthropic();
-
 const SYSTEM_PROMPT = `당신은 건설/산업 자재 플랫폼의 솔루션 기획 전문가입니다.
 입력된 상황, 자재 정보, 카탈로그 등을 바탕으로 구매 가능한 형태의 솔루션 초안을 생성합니다.
 
@@ -94,6 +92,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
