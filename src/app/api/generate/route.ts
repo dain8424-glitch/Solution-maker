@@ -10,33 +10,6 @@ const SYSTEM_PROMPT = `당신은 건설/산업 자재 플랫폼의 솔루션 기
 - 공정(Process): 어느 공정/단계에 적용되는가 (예: 기초공사, 마감공사, 설비공사, 유지보수 등)
 - 태깅 기준(Tags): 검색/분류를 위한 키워드들
 
-출력은 반드시 아래 JSON 형식을 정확히 따라야 합니다:
-{
-  "name": "솔루션명 (상황과 해결 목적이 명확히 드러나야 함)",
-  "subject": "주제 분류",
-  "process": "공정 분류",
-  "tags": ["태그1", "태그2", "태그3", ...],
-  "specs": "전체 솔루션 규격 및 적용 범위 설명",
-  "mainMaterials": [
-    { "name": "자재명", "spec": "규격/사양", "purpose": "이 자재의 역할" }
-  ],
-  "subMaterials": [
-    { "name": "자재명", "spec": "규격/사양", "purpose": "이 자재의 역할" }
-  ],
-  "detailPage": [
-    {
-      "title": "섹션 제목",
-      "content": "상세 텍스트 내용",
-      "imageNeeded": {
-        "section": "섹션명",
-        "description": "필요한 이미지 콘티 설명",
-        "purpose": "이미지가 전달해야 할 메시지"
-      }
-    }
-  ],
-  "notes": "판매사에 전달할 보완 요청 사항 (선택)"
-}
-
 detailPage는 실제 상품 상세페이지 수준으로 작성하세요:
 1. 솔루션 소개 및 필요성
 2. 적용 전/후 비교 또는 문제 상황
@@ -44,7 +17,68 @@ detailPage는 실제 상품 상세페이지 수준으로 작성하세요:
 4. 시공 방법 또는 적용 순서
 5. 기대 효과 및 사양
 
-이미지가 필요한 섹션에만 imageNeeded를 포함하세요. JSON만 출력하고 다른 텍스트는 포함하지 마세요.`;
+이미지가 필요한 섹션에만 imageNeeded를 포함하세요.`;
+
+const SOLUTION_TOOL: Anthropic.Tool = {
+  name: "generate_solution",
+  description: "솔루션 초안을 생성합니다",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      name: { type: "string", description: "솔루션명" },
+      subject: { type: "string", description: "주제 분류" },
+      process: { type: "string", description: "공정 분류" },
+      tags: { type: "array", items: { type: "string" }, description: "태그 목록" },
+      specs: { type: "string", description: "규격 및 적용 범위" },
+      mainMaterials: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            spec: { type: "string" },
+            purpose: { type: "string" },
+          },
+          required: ["name", "spec", "purpose"],
+        },
+      },
+      subMaterials: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            spec: { type: "string" },
+            purpose: { type: "string" },
+          },
+          required: ["name", "spec", "purpose"],
+        },
+      },
+      detailPage: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            content: { type: "string" },
+            imageNeeded: {
+              type: "object",
+              properties: {
+                section: { type: "string" },
+                description: { type: "string" },
+                purpose: { type: "string" },
+              },
+              required: ["section", "description", "purpose"],
+            },
+          },
+          required: ["title", "content"],
+        },
+      },
+      notes: { type: "string", description: "판매사 보완 요청" },
+    },
+    required: ["name", "subject", "process", "tags", "specs", "mainMaterials", "subMaterials", "detailPage"],
+  },
+};
 
 function buildUserPrompt(req: SolutionRequest): string {
   const productList = req.products
@@ -73,7 +107,7 @@ ${req.catalogInfo}
 ${req.additionalContext}
 `
     : ""
-}위 정보를 바탕으로 솔루션 초안을 JSON 형식으로 생성해주세요.`;
+}generate_solution 툴을 사용해서 솔루션 초안을 생성해주세요.`;
 }
 
 export async function POST(request: NextRequest) {
@@ -99,6 +133,8 @@ export async function POST(request: NextRequest) {
       model: "claude-sonnet-4-6",
       max_tokens: 8096,
       system: SYSTEM_PROMPT,
+      tools: [SOLUTION_TOOL],
+      tool_choice: { type: "any" },
       messages: [
         {
           role: "user",
@@ -107,18 +143,12 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    const textContent = message.content.find((c) => c.type === "text");
-    if (!textContent || textContent.type !== "text") {
+    const toolUse = message.content.find((c) => c.type === "tool_use");
+    if (!toolUse || toolUse.type !== "tool_use") {
       throw new Error("응답 생성에 실패했습니다.");
     }
 
-    const rawText = textContent.text.trim();
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("JSON 형식의 응답을 받지 못했습니다.");
-    }
-
-    const solution: SolutionDraft = JSON.parse(jsonMatch[0]);
+    const solution = toolUse.input as SolutionDraft;
     return NextResponse.json({ solution });
   } catch (err) {
     const message = err instanceof Error ? err.message : "알 수 없는 오류";
