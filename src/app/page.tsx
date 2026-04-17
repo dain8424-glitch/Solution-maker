@@ -91,7 +91,7 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
       )}
 
       <div className="output-actions">
-        <button className="btn btn-secondary" onClick={copyJSON}>
+        <button type="button" className="btn btn-secondary" onClick={copyJSON}>
           JSON 복사
         </button>
       </div>
@@ -185,6 +185,7 @@ export default function Page() {
                     <span className="product-name">{p.name}</span>
                     {p.spec && <span className="product-spec">{p.spec}</span>}
                     <button
+                      type="button"
                       className="product-remove"
                       onClick={() => removeProduct(p.id)}
                       title="삭제"
@@ -199,13 +200,13 @@ export default function Page() {
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addProduct()}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addProduct(); } }}
                 placeholder="자재명"
               />
               <input
                 value={newSpec}
                 onChange={(e) => setNewSpec(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addProduct()}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addProduct(); } }}
                 placeholder="규격 (선택)"
               />
               <select
@@ -216,7 +217,7 @@ export default function Page() {
                 <option value="sub">부자재</option>
               </select>
             </div>
-            <button className="btn btn-add" style={{ marginTop: 8, width: "100%" }} onClick={addProduct}>
+            <button type="button" className="btn btn-add" style={{ marginTop: 8, width: "100%" }} onClick={addProduct}>
               + 자재 추가
             </button>
           </div>
@@ -241,7 +242,7 @@ export default function Page() {
             />
           </div>
 
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={!canGenerate}>
+          <button type="button" className="btn btn-primary" onClick={handleGenerate} disabled={!canGenerate}>
             {loading ? "생성 중..." : "솔루션 초안 생성"}
           </button>
         </div>
