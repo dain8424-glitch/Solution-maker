@@ -11,6 +11,12 @@ export interface CatalogFile {
   mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 }
 
+export interface SubjectTag {
+  main: string;
+  subs: string[];
+  isNew: boolean;
+}
+
 export interface SolutionRequest {
   situation: string;
   products: Product[];
@@ -33,7 +39,7 @@ export interface DetailPageSection {
 
 export interface SolutionDraft {
   name: string;
-  subject: string;
+  subjects: SubjectTag[];
   process: string;
   tags: string[];
   specs: string;

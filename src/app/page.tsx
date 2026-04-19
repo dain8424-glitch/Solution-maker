@@ -15,7 +15,7 @@ const ACCEPTED_TYPES: Record<string, CatalogFile["mediaType"]> = {
   "image/webp": "image/webp",
 };
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 function SolutionOutput({ solution }: { solution: SolutionDraft }) {
   const copyJSON = () => {
@@ -26,11 +26,33 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
     <div className="solution-output">
       <div className="solution-header">
         <div className="solution-name">{solution.name}</div>
-        <div className="solution-axes">
-          <span className="axis-item axis-subject">주제: {solution.subject}</span>
+
+        <div style={{ marginTop: 12 }}>
+          <div className="section-title" style={{ marginBottom: 8 }}>주제 분류</div>
+          {solution.subjects.map((s, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              <span className="axis-item axis-subject">
+                {s.main}
+                {s.isNew && (
+                  <span style={{ background: "#ef4444", color: "white", fontSize: "10px", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold", marginLeft: "6px" }}>
+                    NEW
+                  </span>
+                )}
+              </span>
+              {s.subs.length > 0 && (
+                <div className="tags" style={{ marginTop: 4 }}>
+                  {s.subs.map((sub, j) => <span key={j} className="tag">#{sub}</span>)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 8 }}>
           <span className="axis-item axis-process">공정: {solution.process}</span>
         </div>
-        <div className="tags">
+
+        <div className="tags" style={{ marginTop: 8 }}>
           {solution.tags.map((tag) => (
             <span key={tag} className="tag">#{tag}</span>
           ))}
@@ -134,7 +156,7 @@ export default function Page() {
 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        alert(`${file.name}: 파일 크기가 5MB를 초과합니다.`);
+        alert(`${file.name}: 파일 크기가 20MB를 초과합니다.`);
         continue;
       }
       const mediaType = ACCEPTED_TYPES[file.type];
@@ -142,10 +164,7 @@ export default function Page() {
 
       const data = await new Promise<string>((resolve) => {
         const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(",")[1];
-          resolve(base64);
-        };
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
         reader.readAsDataURL(file);
       });
 
@@ -259,7 +278,7 @@ export default function Page() {
                 onChange={handleFileChange}
               />
               <button type="button" className="btn btn-add" style={{ width: "100%" }} onClick={() => fileInputRef.current?.click()}>
-                + PDF / 이미지 파일 첨부
+                + PDF / 이미지 파일 첨부 (최대 20MB)
               </button>
             </div>
             {catalogFiles.length > 0 && (
