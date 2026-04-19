@@ -5,10 +5,17 @@ export interface Product {
   role: "main" | "sub";
 }
 
+export interface CatalogFile {
+  name: string;
+  data: string;
+  mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+}
+
 export interface SolutionRequest {
   situation: string;
   products: Product[];
   catalogInfo?: string;
+  catalogFiles?: CatalogFile[];
   additionalContext?: string;
 }
 

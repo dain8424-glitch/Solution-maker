@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import type { Product, SolutionDraft, SolutionRequest } from "@/types/solution";
+import { useState, useCallback, useRef } from "react";
+import type { Product, SolutionDraft, SolutionRequest, CatalogFile } from "@/types/solution";
 
 let idCounter = 0;
 const uid = () => `p${++idCounter}`;
+
+const ACCEPTED_TYPES: Record<string, CatalogFile["mediaType"]> = {
+  "application/pdf": "application/pdf",
+  "image/jpeg": "image/jpeg",
+  "image/jpg": "image/jpeg",
+  "image/png": "image/png",
+  "image/gif": "image/gif",
+  "image/webp": "image/webp",
+};
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function SolutionOutput({ solution }: { solution: SolutionDraft }) {
   const copyJSON = () => {
@@ -62,19 +73,14 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
         <div className="detail-sections">
           {solution.detailPage.map((sec, i) => (
             <div key={i} className="detail-section">
-              <div className="detail-section-header">
-                {i + 1}. {sec.title}
-              </div>
+              <div className="detail-section-header">{i + 1}. {sec.title}</div>
               <div className="detail-section-content">{sec.content}</div>
               {sec.imageNeeded && (
                 <div className="storyboard-box">
                   <div className="storyboard-label">이미지 콘티</div>
                   <div className="storyboard-desc">
-                    <strong>{sec.imageNeeded.section}</strong>
-                    {" — "}
-                    {sec.imageNeeded.description}
-                    <br />
-                    <em>목적: {sec.imageNeeded.purpose}</em>
+                    <strong>{sec.imageNeeded.section}</strong>{" — "}{sec.imageNeeded.description}
+                    <br /><em>목적: {sec.imageNeeded.purpose}</em>
                   </div>
                 </div>
               )}
@@ -91,9 +97,7 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
       )}
 
       <div className="output-actions">
-        <button type="button" className="btn btn-secondary" onClick={copyJSON}>
-          JSON 복사
-        </button>
+        <button type="button" className="btn btn-secondary" onClick={copyJSON}>JSON 복사</button>
       </div>
     </div>
   );
@@ -106,18 +110,16 @@ export default function Page() {
   const [newSpec, setNewSpec] = useState("");
   const [newRole, setNewRole] = useState<"main" | "sub">("main");
   const [catalogInfo, setCatalogInfo] = useState("");
+  const [catalogFiles, setCatalogFiles] = useState<CatalogFile[]>([]);
   const [additionalContext, setAdditionalContext] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [solution, setSolution] = useState<SolutionDraft | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addProduct = useCallback(() => {
     if (!newName.trim()) return;
-    setProducts((prev) => [
-      ...prev,
-      { id: uid(), name: newName.trim(), spec: newSpec.trim() || undefined, role: newRole },
-    ]);
+    setProducts((prev) => [...prev, { id: uid(), name: newName.trim(), spec: newSpec.trim() || undefined, role: newRole }]);
     setNewName("");
     setNewSpec("");
   }, [newName, newSpec, newRole]);
@@ -126,12 +128,44 @@ export default function Page() {
     setProducts((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    const results: CatalogFile[] = [];
+
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`${file.name}: 파일 크기가 5MB를 초과합니다.`);
+        continue;
+      }
+      const mediaType = ACCEPTED_TYPES[file.type];
+      if (!mediaType) continue;
+
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(",")[1];
+          resolve(base64);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      results.push({ name: file.name, data, mediaType });
+    }
+
+    setCatalogFiles((prev) => [...prev, ...results]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setCatalogFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleGenerate = async () => {
     setError(null);
     setLoading(true);
     setSolution(null);
 
-    const body: SolutionRequest = { situation, products, catalogInfo, additionalContext };
+    const body: SolutionRequest = { situation, products, catalogInfo, catalogFiles, additionalContext };
 
     try {
       const res = await fetch("/api/generate", {
@@ -167,7 +201,7 @@ export default function Page() {
             <textarea
               value={situation}
               onChange={(e) => setSituation(e.target.value)}
-              placeholder="예: 지하 주차장 천장에서 누수가 발생하여 빠른 보수가 필요합니다. 기존 방수층이 노후화되었으며 면적은 약 50㎡입니다."
+              placeholder="예: 지하 주차장 천장에서 누수가 발생하여 빠른 보수가 필요합니다."
               rows={4}
             />
           </div>
@@ -178,19 +212,10 @@ export default function Page() {
               <div className="product-list">
                 {products.map((p) => (
                   <div key={p.id} className="product-item">
-                    <span className={`product-role-badge ${p.role}`}>
-                      {p.role === "main" ? "메인" : "부자재"}
-                    </span>
+                    <span className={`product-role-badge ${p.role}`}>{p.role === "main" ? "메인" : "부자재"}</span>
                     <span className="product-name">{p.name}</span>
                     {p.spec && <span className="product-spec">{p.spec}</span>}
-                    <button
-                      type="button"
-                      className="product-remove"
-                      onClick={() => removeProduct(p.id)}
-                      title="삭제"
-                    >
-                      ×
-                    </button>
+                    <button type="button" className="product-remove" onClick={() => removeProduct(p.id)} title="삭제">×</button>
                   </div>
                 ))}
               </div>
@@ -208,17 +233,12 @@ export default function Page() {
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addProduct(); } }}
                 placeholder="규격 (선택)"
               />
-              <select
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as "main" | "sub")}
-              >
+              <select value={newRole} onChange={(e) => setNewRole(e.target.value as "main" | "sub")}>
                 <option value="main">메인</option>
                 <option value="sub">부자재</option>
               </select>
             </div>
-            <button type="button" className="btn btn-add" style={{ marginTop: 8, width: "100%" }} onClick={addProduct}>
-              + 자재 추가
-            </button>
+            <button type="button" className="btn btn-add" style={{ marginTop: 8, width: "100%" }} onClick={addProduct}>+ 자재 추가</button>
           </div>
 
           <div className="form-group">
@@ -226,9 +246,33 @@ export default function Page() {
             <textarea
               value={catalogInfo}
               onChange={(e) => setCatalogInfo(e.target.value)}
-              placeholder="제품 카탈로그 내용, 기술 사양, 시공 방법 등을 붙여넣기 하세요."
-              rows={3}
+              placeholder="텍스트로 붙여넣기 하세요."
+              rows={2}
             />
+            <div style={{ marginTop: 8 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleFileChange}
+              />
+              <button type="button" className="btn btn-add" style={{ width: "100%" }} onClick={() => fileInputRef.current?.click()}>
+                + PDF / 이미지 파일 첨부
+              </button>
+            </div>
+            {catalogFiles.length > 0 && (
+              <div className="product-list" style={{ marginTop: 8 }}>
+                {catalogFiles.map((f, i) => (
+                  <div key={i} className="product-item">
+                    <span className="product-role-badge main">{f.mediaType === "application/pdf" ? "PDF" : "이미지"}</span>
+                    <span className="product-name">{f.name}</span>
+                    <button type="button" className="product-remove" onClick={() => removeFile(i)} title="삭제">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -248,28 +292,16 @@ export default function Page() {
 
         <div className="card">
           {loading && (
-            <div className="loading-state">
-              <div className="spinner" />
-              <span>솔루션 초안을 생성하고 있습니다...</span>
-            </div>
+            <div className="loading-state"><div className="spinner" /><span>솔루션 초안을 생성하고 있습니다...</span></div>
           )}
-
-          {!loading && error && (
-            <div className="error-state">
-              오류: {error}
-            </div>
-          )}
-
+          {!loading && error && <div className="error-state">오류: {error}</div>}
           {!loading && !error && !solution && (
             <div className="output-placeholder">
               <div className="output-placeholder-icon">📋</div>
               <span>왼쪽에서 정보를 입력하고<br />솔루션 초안 생성 버튼을 누르세요.</span>
             </div>
           )}
-
-          {!loading && !error && solution && (
-            <SolutionOutput solution={solution} />
-          )}
+          {!loading && !error && solution && <SolutionOutput solution={solution} />}
         </div>
       </div>
     </div>
