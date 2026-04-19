@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import type { SolutionRequest, SolutionDraft } from "@/types/solution";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const SYSTEM_PROMPT = `당신은 건설/산업 자재 플랫폼의 솔루션 기획 전문가입니다.
 입력된 상황, 자재 정보, 카탈로그 등을 바탕으로 구매 가능한 형태의 솔루션 초안을 생성합니다.
@@ -149,44 +152,108 @@ function buildContentBlocks(req: SolutionRequest): unknown[] {
   return blocks;
 }
 
+const FIELD_STATUS: Array<[string, string]> = [
+  ["subjects", "주제 분류 중..."],
+  ["process", "공정 분류 중..."],
+  ["tags", "검색 태그 작성 중..."],
+  ["specs", "규격 및 적용 범위 작성 중..."],
+  ["mainMaterials", "메인 자재 구성 중..."],
+  ["subMaterials", "부자재 구성 중..."],
+  ["detailPage", "상세 페이지 작성 중..."],
+  ["notes", "보완 사항 정리 중..."],
+];
+
 export async function POST(request: NextRequest) {
-  try {
-    const body: SolutionRequest = await request.json();
+  const body: SolutionRequest = await request.json();
 
-    if (!body.situation?.trim()) {
-      return NextResponse.json({ error: "상황 설명을 입력해주세요." }, { status: 400 });
-    }
-    if (!body.products?.length) {
-      return NextResponse.json({ error: "최소 1개 이상의 자재를 추가해주세요." }, { status: 400 });
-    }
-
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const hasPdf = body.catalogFiles?.some((f) => f.mediaType === "application/pdf") ?? false;
-    const content = buildContentBlocks(body);
-
-    const params = {
-      model: "claude-sonnet-4-6",
-      max_tokens: 8096,
-      system: SYSTEM_PROMPT,
-      tools: [SOLUTION_TOOL],
-      tool_choice: { type: "tool" as const, name: "generate_solution" },
-      messages: [{ role: "user" as const, content }],
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const message: Anthropic.Message = hasPdf
-      ? await (client.beta.messages.create as any)({ ...params, betas: ["pdfs-2024-09-25"] })
-      : await client.messages.create(params as Parameters<typeof client.messages.create>[0]);
-
-    const toolUse = message.content.find((c) => c.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
-      throw new Error("응답 생성에 실패했습니다.");
-    }
-
-    const solution = toolUse.input as SolutionDraft;
-    return NextResponse.json({ solution });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "알 수 없는 오류";
-    return NextResponse.json({ error: message }, { status: 500 });
+  if (!body.situation?.trim()) {
+    return new Response(JSON.stringify({ error: "상황 설명을 입력해주세요." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
+  if (!body.products?.length) {
+    return new Response(JSON.stringify({ error: "최소 1개 이상의 자재를 추가해주세요." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const hasPdf = body.catalogFiles?.some((f) => f.mediaType === "application/pdf") ?? false;
+  const content = buildContentBlocks(body);
+
+  const params = {
+    model: "claude-sonnet-4-6",
+    max_tokens: 8096,
+    system: SYSTEM_PROMPT,
+    tools: [SOLUTION_TOOL],
+    tool_choice: { type: "tool" as const, name: "generate_solution" },
+    messages: [{ role: "user" as const, content }],
+  };
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (data: unknown) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      };
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(encoder.encode(`: ping\n\n`)); } catch {}
+      }, 10000);
+
+      try {
+        send({ type: "status", message: "상황 및 자재 분석 중..." });
+
+        const apiStream = hasPdf
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? (client.beta.messages.stream as any)({ ...params, betas: ["pdfs-2024-09-25"] })
+          : client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
+
+        let accumulated = "";
+        const sent = new Set<string>();
+
+        for await (const event of apiStream) {
+          if (
+            event.type === "content_block_delta" &&
+            event.delta?.type === "input_json_delta"
+          ) {
+            accumulated += event.delta.partial_json ?? "";
+            for (const [field, msg] of FIELD_STATUS) {
+              if (!sent.has(field) && accumulated.includes(`"${field}"`)) {
+                sent.add(field);
+                send({ type: "status", message: msg });
+              }
+            }
+          }
+        }
+
+        const finalMessage = await apiStream.finalMessage();
+        const toolUse = finalMessage.content.find(
+          (c: Anthropic.ContentBlock) => c.type === "tool_use"
+        );
+        if (!toolUse || toolUse.type !== "tool_use") {
+          throw new Error("응답 생성에 실패했습니다.");
+        }
+
+        send({ type: "done", solution: toolUse.input as SolutionDraft });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "알 수 없는 오류";
+        send({ type: "error", message });
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

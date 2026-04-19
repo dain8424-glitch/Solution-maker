@@ -135,6 +135,7 @@ export default function Page() {
   const [catalogFiles, setCatalogFiles] = useState<CatalogFile[]>([]);
   const [additionalContext, setAdditionalContext] = useState("");
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [solution, setSolution] = useState<SolutionDraft | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -183,6 +184,7 @@ export default function Page() {
     setError(null);
     setLoading(true);
     setSolution(null);
+    setStatusMessage("요청 전송 중...");
 
     const body: SolutionRequest = { situation, products, catalogInfo, catalogFiles, additionalContext };
 
@@ -192,13 +194,48 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "오류가 발생했습니다.");
-      setSolution(data.solution);
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "요청 실패" }));
+        throw new Error(errData.error ?? "오류가 발생했습니다.");
+      }
+      if (!res.body) throw new Error("응답 스트림을 열 수 없습니다.");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamError: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+
+        for (const chunk of chunks) {
+          const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          const payload = line.slice(6).trim();
+          if (!payload) continue;
+          try {
+            const event = JSON.parse(payload);
+            if (event.type === "status") setStatusMessage(event.message);
+            else if (event.type === "done") setSolution(event.solution);
+            else if (event.type === "error") streamError = event.message;
+          } catch {
+            // ignore malformed chunk
+          }
+        }
+      }
+
+      if (streamError) throw new Error(streamError);
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
       setLoading(false);
+      setStatusMessage("");
     }
   };
 
@@ -311,7 +348,10 @@ export default function Page() {
 
         <div className="card">
           {loading && (
-            <div className="loading-state"><div className="spinner" /><span>솔루션 초안을 생성하고 있습니다...</span></div>
+            <div className="loading-state">
+              <div className="spinner" />
+              <span>{statusMessage || "솔루션 초안을 생성하고 있습니다..."}</span>
+            </div>
           )}
           {!loading && error && <div className="error-state">오류: {error}</div>}
           {!loading && !error && !solution && (
