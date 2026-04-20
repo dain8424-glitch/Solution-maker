@@ -56,14 +56,12 @@ const SYSTEM_PROMPT = `당신은 건설/산업 자재 플랫폼의 솔루션 기
 3. 위 목록에 있는 main이면 isNew: false, 새로 만든 main이면 isNew: true
 4. isNew: true인 경우 subs도 자유롭게 정의
 
-detailPage는 실제 상품 상세페이지 수준으로 작성하세요:
-1. 솔루션 소개 및 필요성
-2. 적용 전/후 비교 또는 문제 상황
-3. 구성 자재 상세 설명
-4. 시공 방법 또는 적용 순서
-5. 기대 효과 및 사양
+detailPage는 3개 섹션으로 간결하게 작성하세요:
+1. 솔루션 소개 및 필요성 (3~4문장)
+2. 구성 자재 및 시공 방법 (3~4문장)
+3. 기대 효과 (2~3문장)
 
-이미지가 필요한 섹션에만 imageNeeded를 포함하세요.`;
+각 섹션 content는 5문장 이내로 작성하세요. 이미지가 필요한 섹션에만 imageNeeded를 포함하세요.`;
 
 const SOLUTION_TOOL: Anthropic.Tool = {
   name: "generate_solution",

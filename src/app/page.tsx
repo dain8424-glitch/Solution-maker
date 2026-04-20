@@ -232,6 +232,7 @@ export default function Page() {
       const decoder = new TextDecoder();
       let buffer = "";
       let streamError: string | null = null;
+      let solutionReceived = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -249,7 +250,7 @@ export default function Page() {
           try {
             const event = JSON.parse(payload);
             if (event.type === "status") setStatusMessage(event.message);
-            else if (event.type === "done") setSolution(event.solution);
+            else if (event.type === "done") { setSolution(event.solution); solutionReceived = true; }
             else if (event.type === "error") streamError = event.message;
           } catch {
             // ignore malformed chunk
@@ -258,6 +259,7 @@ export default function Page() {
       }
 
       if (streamError) throw new Error(streamError);
+      if (!solutionReceived) throw new Error("응답이 완성되지 못했습니다. 다시 시도해주세요.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
     } finally {
