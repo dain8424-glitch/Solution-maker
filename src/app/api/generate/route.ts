@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
 
   const params = {
     model: "claude-sonnet-4-6",
-    max_tokens: 8096,
+    max_tokens: 16000,
     system: SYSTEM_PROMPT,
     tools: [SOLUTION_TOOL],
     tool_choice: { type: "tool" as const, name: "generate_solution" },
@@ -252,7 +252,6 @@ export async function POST(request: NextRequest) {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     },
   });
