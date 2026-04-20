@@ -143,7 +143,9 @@ function buildContentBlocks(req: SolutionRequest): unknown[] {
 
   for (const file of req.catalogFiles ?? []) {
     if (file.mediaType === "application/pdf") {
-      blocks.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: file.data } });
+      if (file.extractedText) {
+        blocks.push({ type: "text", text: `[카탈로그 PDF: ${file.name}]\n${file.extractedText}` });
+      }
     } else {
       blocks.push({ type: "image", source: { type: "base64", media_type: file.mediaType, data: file.data } });
     }
@@ -180,7 +182,6 @@ export async function POST(request: NextRequest) {
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const hasPdf = body.catalogFiles?.some((f) => f.mediaType === "application/pdf") ?? false;
   const content = buildContentBlocks(body);
 
   const params = {
@@ -206,10 +207,7 @@ export async function POST(request: NextRequest) {
       try {
         send({ type: "status", message: "상황 및 자재 분석 중..." });
 
-        const apiStream = hasPdf
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ? (client.beta.messages.stream as any)({ ...params, betas: ["pdfs-2024-09-25"] })
-          : client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
+        const apiStream = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
 
         let accumulated = "";
         const sent = new Set<string>();

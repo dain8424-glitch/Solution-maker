@@ -9,6 +9,7 @@ export interface CatalogFile {
   name: string;
   data: string;
   mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  extractedText?: string; // PDFs: text extracted client-side, data will be empty
 }
 
 export interface SubjectTag {

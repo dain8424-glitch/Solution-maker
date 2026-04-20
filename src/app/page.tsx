@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { Product, SolutionDraft, SolutionRequest, CatalogFile } from "@/types/solution";
 
 let idCounter = 0;
@@ -16,6 +17,24 @@ const ACCEPTED_TYPES: Record<string, CatalogFile["mediaType"]> = {
 };
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+async function extractPdfText(file: File): Promise<string> {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items
+      .filter((item): item is TextItem => "str" in item)
+      .map((item) => item.str)
+      .join(" ");
+    pages.push(text);
+  }
+  return pages.join("\n\n");
+}
 
 function SolutionOutput({ solution }: { solution: SolutionDraft }) {
   const copyJSON = () => {
@@ -163,13 +182,21 @@ export default function Page() {
       const mediaType = ACCEPTED_TYPES[file.type];
       if (!mediaType) continue;
 
-      const data = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.readAsDataURL(file);
-      });
-
-      results.push({ name: file.name, data, mediaType });
+      if (mediaType === "application/pdf") {
+        try {
+          const extractedText = await extractPdfText(file);
+          results.push({ name: file.name, data: "", mediaType, extractedText });
+        } catch {
+          alert(`${file.name}: PDF 텍스트 추출에 실패했습니다.`);
+        }
+      } else {
+        const data = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.readAsDataURL(file);
+        });
+        results.push({ name: file.name, data, mediaType });
+      }
     }
 
     setCatalogFiles((prev) => [...prev, ...results]);
