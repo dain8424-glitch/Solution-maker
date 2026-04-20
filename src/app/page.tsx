@@ -74,23 +74,34 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
 
         <div style={{ marginTop: 12 }}>
           <div className="section-title" style={{ marginBottom: 8 }}>주제 분류</div>
-          {solution.subjects.map((s, i) => (
-            <div key={i} style={{ marginBottom: 8 }}>
-              <span className="axis-item axis-subject">
-                {s.main}
-                {s.isNew && (
-                  <span style={{ background: "#ef4444", color: "white", fontSize: "10px", padding: "2px 6px", borderRadius: "4px", fontWeight: "bold", marginLeft: "6px" }}>
-                    NEW
-                  </span>
-                )}
-              </span>
-              {s.subs.length > 0 && (
-                <div className="tags" style={{ marginTop: 4 }}>
-                  {s.subs.map((sub, j) => <span key={j} className="tag">#{sub}</span>)}
+          <div className="subject-tree">
+            {solution.subjects.map((s, i) => (
+              <div key={i} className={`subject-node ${s.isNew ? "subject-new" : "subject-existing"}`}>
+                <div className="subject-main">
+                  {s.isNew ? "📁" : "📂"} {s.main}
+                  {s.isNew && <span className="badge-new">NEW</span>}
                 </div>
-              )}
-            </div>
-          ))}
+                {s.subs.length > 0 && (
+                  <div className="subject-children">
+                    {s.subs.map((sub, j) => (
+                      <div key={j} className="subject-criteria">
+                        <span className="tree-branch">{j === s.subs.length - 1 ? "└──" : "├──"}</span>
+                        <span className="criteria-label">{sub.criteria}</span>
+                        <div className="criteria-values">
+                          {sub.values.map((val, k) => (
+                            <div key={k} className="criteria-value">
+                              <span className="tree-branch" style={{ marginLeft: 16 }}>{k === sub.values.length - 1 ? "└─" : "├─"}</span>
+                              <span className="value-tag">{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div style={{ marginTop: 8 }}>

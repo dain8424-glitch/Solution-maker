@@ -12,9 +12,14 @@ export interface CatalogFile {
   extractedText?: string; // PDFs: text extracted client-side, data will be empty
 }
 
+export interface SubCriteria {
+  criteria: string;
+  values: string[];
+}
+
 export interface SubjectTag {
   main: string;
-  subs: string[];
+  subs: SubCriteria[];
   isNew: boolean;
 }
 

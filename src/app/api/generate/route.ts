@@ -52,9 +52,10 @@ const SYSTEM_PROMPT = `당신은 건설/산업 자재 플랫폼의 솔루션 기
 
 === 주제 태깅 규칙 ===
 1. main 주제는 여러 개 태깅 가능
-2. 각 main 내 기준별로 sub 태깅 가능 (같은 기준 내에서는 하나만, 여러 기준 선택 가능)
-3. 위 목록에 있는 main이면 isNew: false, 새로 만든 main이면 isNew: true
-4. isNew: true인 경우 subs도 자유롭게 정의
+2. subs는 반드시 { criteria: "기준명", values: ["sub주제1", "sub주제2"] } 형태로 출력
+3. 각 main 내 기준별로 하나의 criteria 객체 생성, values에 선택된 sub 주제 나열
+4. 위 목록에 있는 main이면 isNew: false, 새로 만든 main이면 isNew: true
+5. isNew: true인 경우 subs도 자유롭게 criteria/values 정의
 
 detailPage는 실제 상품 상세페이지 수준으로 작성하세요:
 1. 솔루션 소개 및 필요성
@@ -79,7 +80,18 @@ const SOLUTION_TOOL: Anthropic.Tool = {
           type: "object",
           properties: {
             main: { type: "string", description: "main 주제명" },
-            subs: { type: "array", items: { type: "string" }, description: "선택된 sub 주제들" },
+            subs: {
+              type: "array",
+              description: "기준별 sub 주제 목록",
+              items: {
+                type: "object",
+                properties: {
+                  criteria: { type: "string", description: "기준명 (예: 사용자, 공정별, 신체 부위별)" },
+                  values: { type: "array", items: { type: "string" }, description: "해당 기준에서 선택된 sub 주제들" },
+                },
+                required: ["criteria", "values"],
+              },
+            },
             isNew: { type: "boolean", description: "미리 정의된 목록에 없는 새 주제면 true" },
           },
           required: ["main", "subs", "isNew"],
