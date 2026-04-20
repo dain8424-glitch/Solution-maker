@@ -17,6 +17,11 @@ const ACCEPTED_TYPES: Record<string, CatalogFile["mediaType"]> = {
 };
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const BINARY_SIZE_LIMIT = 3 * 1024 * 1024; // ~4MB base64, Vercel 4.5MB 이내
+
+function formatMB(bytes: number) {
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
 
 async function extractPdfText(file: File): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist");
@@ -199,26 +204,44 @@ export default function Page() {
 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        alert(`${file.name}: 파일 크기가 20MB를 초과합니다.`);
+        alert(`${file.name} (${formatMB(file.size)}): 파일 크기가 20MB를 초과합니다.`);
         continue;
       }
       const mediaType = ACCEPTED_TYPES[file.type];
       if (!mediaType) continue;
 
+      const isLarge = file.size > BINARY_SIZE_LIMIT;
+
       if (mediaType === "application/pdf") {
-        try {
-          const extractedText = await extractPdfText(file);
-          results.push({ name: file.name, data: "", mediaType, extractedText });
-        } catch {
-          alert(`${file.name}: PDF 텍스트 추출에 실패했습니다.`);
+        if (isLarge) {
+          try {
+            const extractedText = await extractPdfText(file);
+            results.push({ name: file.name, data: "", mediaType, extractedText });
+            alert(`📄 ${file.name} (${formatMB(file.size)})\n용량 초과 → 텍스트만 추출하여 전송됩니다.`);
+          } catch {
+            alert(`${file.name}: PDF 텍스트 추출에 실패했습니다.`);
+          }
+        } else {
+          const data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1]);
+            reader.readAsDataURL(file);
+          });
+          results.push({ name: file.name, data, mediaType });
+          alert(`📄 ${file.name} (${formatMB(file.size)})\n이미지+텍스트 포함 서버 전송됩니다.`);
         }
       } else {
+        if (isLarge) {
+          alert(`🖼️ ${file.name} (${formatMB(file.size)})\n이미지는 3MB 이하만 지원합니다. 건너뜁니다.`);
+          continue;
+        }
         const data = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve((reader.result as string).split(",")[1]);
           reader.readAsDataURL(file);
         });
         results.push({ name: file.name, data, mediaType });
+        alert(`🖼️ ${file.name} (${formatMB(file.size)})\n이미지 서버 전송됩니다.`);
       }
     }
 
