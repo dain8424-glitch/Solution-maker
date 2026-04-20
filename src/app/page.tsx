@@ -16,8 +16,6 @@ const ACCEPTED_TYPES: Record<string, CatalogFile["mediaType"]> = {
 };
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-// Vercel Hobby request body limit is 4.5 MB; base64 inflates by ~33%
-const MAX_TOTAL_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 function SolutionOutput({ solution }: { solution: SolutionDraft }) {
   const copyJSON = () => {
@@ -174,15 +172,7 @@ export default function Page() {
       results.push({ name: file.name, data, mediaType });
     }
 
-    setCatalogFiles((prev) => {
-      const next = [...prev, ...results];
-      const totalBytes = next.reduce((sum, f) => sum + f.data.length * 0.75, 0);
-      if (totalBytes > MAX_TOTAL_UPLOAD_BYTES) {
-        alert(`첨부 파일 총 용량이 3MB를 초과합니다. Vercel 서버 제한으로 인해 PDF/이미지는 합산 3MB 이내로 첨부해주세요.`);
-        return prev;
-      }
-      return next;
-    });
+    setCatalogFiles((prev) => [...prev, ...results]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
