@@ -37,12 +37,33 @@ async function extractPdfText(file: File): Promise<string> {
 }
 
 function SolutionOutput({ solution }: { solution: SolutionDraft }) {
+  const outputRef = useRef<HTMLDivElement>(null);
+
   const copyJSON = () => {
     navigator.clipboard.writeText(JSON.stringify(solution, null, 2));
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!outputRef.current) return;
+    const html2pdf = (await import("html2pdf.js")).default;
+    html2pdf()
+      .set({
+        margin: 12,
+        filename: `${solution.name}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      })
+      .from(outputRef.current)
+      .save();
+  };
+
   return (
-    <div className="solution-output">
+    <div className="solution-output" ref={outputRef}>
       <div className="solution-header">
         <div className="solution-name">{solution.name}</div>
 
@@ -139,6 +160,8 @@ function SolutionOutput({ solution }: { solution: SolutionDraft }) {
 
       <div className="output-actions">
         <button type="button" className="btn btn-secondary" onClick={copyJSON}>JSON 복사</button>
+        <button type="button" className="btn btn-secondary" onClick={handlePrint}>인쇄 / PDF 저장</button>
+        <button type="button" className="btn btn-secondary" onClick={handleDownloadPdf}>PDF 다운로드</button>
       </div>
     </div>
   );
